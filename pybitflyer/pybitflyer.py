@@ -24,10 +24,11 @@ class API(object):
 
     api_url = "https://api.bitflyer.jp"
 
-    def __init__(self, api_key=None, api_secret=None, keep_session=False):
+    def __init__(self, api_key=None, api_secret=None, keep_session=False, timeout=None):
         self.api_key = api_key
         self.api_secret = api_secret
         self.sess = self._new_session() if keep_session else None
+        self.timeout = timeout
 
     def __enter__(self):
         return self
@@ -78,9 +79,9 @@ class API(object):
                 sess.headers.update(auth_header)
 
             if method == "GET":
-                response = sess.get(url, params=params)
+                response = sess.get(url, params=params, timeout=self.timeout)
             else:  # method == "POST":
-                response = sess.post(url, data=json.dumps(params))
+                response = sess.post(url, data=json.dumps(params), timeout=self.timeout)
         except requests.RequestException as e:
             print(e)
             raise
