@@ -8,6 +8,9 @@ import hashlib
 import urllib
 from .exception import AuthException
 from threading import Lock
+import urllib3
+from urllib3.exceptions import InsecureRequestWarning
+urllib3.disable_warnings(InsecureRequestWarning)
 
 class API(object):
     """
@@ -38,7 +41,9 @@ class API(object):
         self.close()
 
     def _new_session(self):
-        return requests.Session()
+        ses = requests.Session()
+        ses.verify = False
+        return ses
 
     def close(self):
         """
