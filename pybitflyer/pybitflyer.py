@@ -7,7 +7,7 @@ import hmac
 import hashlib
 import urllib
 from .exception import AuthException
-
+from threading import Lock
 
 class API(object):
     """
@@ -24,11 +24,12 @@ class API(object):
 
     api_url = "https://api.bitflyer.jp"
 
-    def __init__(self, api_key=None, api_secret=None, keep_session=False, timeout=None):
+    def __init__(self, api_key=None, api_secret=None, keep_session=False, timeout=None, lock=None):
         self.api_key = api_key
         self.api_secret = api_secret
         self.sess = self._new_session() if keep_session else None
         self.timeout = timeout
+        self.lock = lock
 
     def __enter__(self):
         return self
@@ -49,6 +50,13 @@ class API(object):
             self.sess.close()
 
     def _request(self, endpoint, method="GET", params=None):
+        if self.lock is None:
+            return self.__request(endpoint, method, params)
+        else:
+            with self.lock:
+                return self.__request(endpoint, method, params)
+
+    def __request(self, endpoint, method="GET", params=None):
         url = self.api_url + endpoint
         body = ""
         auth_header = None
