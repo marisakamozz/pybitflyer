@@ -27,12 +27,13 @@ class API(object):
 
     api_url = "https://api.bitflyer.jp"
 
-    def __init__(self, api_key=None, api_secret=None, keep_session=False, timeout=None, lock=None):
+    def __init__(self, api_key=None, api_secret=None, keep_session=False, timeout=None, lock=None, logger=None):
         self.api_key = api_key
         self.api_secret = api_secret
         self.sess = self._new_session() if keep_session else None
         self.timeout = timeout
         self.lock = lock
+        self.logger = logger
 
     def __enter__(self):
         return self
@@ -64,7 +65,7 @@ class API(object):
     def __request(self, endpoint, method="GET", params=None):
         url = self.api_url + endpoint
         body = ""
-        auth_header = None
+        header = {"Content-Type": "application/json"}
 
         if method == "POST":
             body = json.dumps(params)
@@ -79,22 +80,17 @@ class API(object):
             access_sign = hmac.new(api_secret,
                                    text,
                                    hashlib.sha256).hexdigest()
-            auth_header = {
+            header.update({
                 "ACCESS-KEY": self.api_key,
                 "ACCESS-TIMESTAMP": access_timestamp,
-                "ACCESS-SIGN": access_sign,
-                "Content-Type": "application/json"
-            }
+                "ACCESS-SIGN": access_sign})
 
         sess = self.sess or self._new_session()
         try:
-            if auth_header:
-                sess.headers.update(auth_header)
-
             if method == "GET":
-                response = sess.get(url, params=params, timeout=self.timeout)
+                response = sess.get(url, params=params, timeout=self.timeout, headers=header)
             else:  # method == "POST":
-                response = sess.post(url, data=json.dumps(params), timeout=self.timeout)
+                response = sess.post(url, data=json.dumps(params), headers=header, timeout=self.timeout)
         except requests.RequestException as e:
             print(e)
             raise
@@ -104,8 +100,12 @@ class API(object):
 
         content = ""
         if len(response.content) > 0:
-            content = json.loads(response.content.decode("utf-8"))
-
+            try:
+                content = json.loads(response.content.decode("utf-8"))
+            except json.decoder.JSONDecodeError:
+                if self.logger:
+                    self.logger.error("JSON Decode Error: {}".format(response.content))
+                raise 
         return content
 
     """HTTP Public API"""
