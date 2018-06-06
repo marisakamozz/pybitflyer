@@ -10,7 +10,14 @@ from .exception import AuthException
 from threading import Lock
 import urllib3
 from urllib3.exceptions import InsecureRequestWarning
+from http import cookiejar
+
 urllib3.disable_warnings(InsecureRequestWarning)
+
+class CookieBlockAllPolicy(cookiejar.CookiePolicy):
+    return_ok = set_ok = domain_return_ok = path_return_ok = lambda self, *args, **kwargs: False
+    netscape = True
+    rfc2965 = hide_cookie2 = False
 
 class API(object):
     """
@@ -44,6 +51,7 @@ class API(object):
     def _new_session(self):
         ses = requests.Session()
         ses.verify = False
+        ses.cookies.set_policy(CookieBlockAllPolicy())
         return ses
 
     def close(self):
