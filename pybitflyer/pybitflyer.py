@@ -9,6 +9,7 @@ import urllib
 from .exception import AuthException
 from threading import Lock
 from http import cookiejar
+from hyper.contrib import HTTP20Adapter
 
 class CookieBlockAllPolicy(cookiejar.CookiePolicy):
     return_ok = set_ok = domain_return_ok = path_return_ok = lambda self, *args, **kwargs: False
@@ -46,6 +47,7 @@ class API(object):
 
     def _new_session(self):
         ses = requests.Session()
+        ses.mount(API.api_url, HTTP20Adapter())
         #ses.cookies.set_policy(CookieBlockAllPolicy())
         return ses
 
