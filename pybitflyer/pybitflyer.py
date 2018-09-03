@@ -46,7 +46,7 @@ class API(object):
 
     def _new_session(self):
         ses = requests.Session()
-        ses.cookies.set_policy(CookieBlockAllPolicy())
+        #ses.cookies.set_policy(CookieBlockAllPolicy())
         return ses
 
     def close(self):
