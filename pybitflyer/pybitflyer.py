@@ -9,7 +9,17 @@ import urllib
 from .exception import AuthException
 from threading import Lock
 from http import cookiejar
-from hyper.contrib import HTTP20Adapter
+import socket
+from urllib3.connection import HTTPConnection
+from hyper.contrib import HTTP20Adapter # pip3 install hyper
+import time
+
+class KeepaliveAdapter(requests.adapters.HTTPAdapter):
+    def init_poolmanager(self, *args, **kwargs):
+        kwargs['socket_options'] = HTTPConnection.default_socket_options + [
+            (socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1),
+        ]
+        super(KeepaliveAdapter, self).init_poolmanager(*args, **kwargs)
 
 class CookieBlockAllPolicy(cookiejar.CookiePolicy):
     return_ok = set_ok = domain_return_ok = path_return_ok = lambda self, *args, **kwargs: False
@@ -31,13 +41,15 @@ class API(object):
 
     api_url = "https://api.bitflyer.jp"
 
-    def __init__(self, api_key=None, api_secret=None, keep_session=False, timeout=None, lock=None, logger=None):
+    def __init__(self, api_key=None, api_secret=None, keep_session=False, timeout=None, lock=None, logger=None, keepalive_timeout=None):
         self.api_key = api_key
         self.api_secret = api_secret
         self.sess = self._new_session() if keep_session else None
         self.timeout = timeout
         self.lock = lock
         self.logger = logger
+        self.keepalive_timeout = keepalive_timeout
+        self.connect_time = time.time()
 
     def __enter__(self):
         return self
@@ -47,6 +59,7 @@ class API(object):
 
     def _new_session(self):
         ses = requests.Session()
+        ses.mount(API.api_url, KeepaliveAdapter())
         ses.mount(API.api_url, HTTP20Adapter())
         #ses.cookies.set_policy(CookieBlockAllPolicy())
         return ses
@@ -61,12 +74,20 @@ class API(object):
             self.sess.close()
 
     def _request(self, endpoint, method="GET", params=None):
+        if ((self.keepalive_timeout is not None and self.sess) and
+            time.time() - self.connect_time > self.keepalive_timeout):
+            try:
+                self.sess.close()
+            except:
+                pass
+            self.sess = self.sess = self._new_session()
         if self.lock is None:
             return self.__request(endpoint, method, params)
         else:
             with self.lock:
                 return self.__request(endpoint, method, params)
-
+            
+            
     def __request(self, endpoint, method="GET", params=None):
         url = self.api_url + endpoint
         body = ""
@@ -96,8 +117,12 @@ class API(object):
                 response = sess.get(url, params=params, timeout=self.timeout, headers=header)
             else:  # method == "POST":
                 response = sess.post(url, data=json.dumps(params), headers=header, timeout=self.timeout)
-        except requests.RequestException as e:
-            print(e)
+        except:
+            if self.logger:
+                self.logger.error("Error: {}".format(sys.exc_info()[0]))
+            if self.sess:
+                self.sess.close()
+                self.sess = self._new_session()
             raise
         finally:
             if sess is not self.sess:
