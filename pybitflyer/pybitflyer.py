@@ -12,7 +12,7 @@ from http import cookiejar
 import socket
 import time
 
-class TCPKeepaliveAdapter(requests.adapters.HTTPAdapter):
+class TCPKeepAliveAdapter(requests.adapters.HTTPAdapter):
 # /etc/sysctl.conf
 #  net.ipv4.tcp_keepalive_time = 60
 #  net.ipv4.tcp_keepalive_intvl = 30
@@ -23,7 +23,7 @@ class TCPKeepaliveAdapter(requests.adapters.HTTPAdapter):
         kwargs['socket_options'] = HTTPConnection.default_socket_options + [
             (socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1),
         ]
-        super(TCPKeepaliveAdapter, self).init_poolmanager(*args, **kwargs)
+        super(TCPKeepAliveAdapter, self).init_poolmanager(*args, **kwargs)
 
 class CookieBlockAllPolicy(cookiejar.CookiePolicy):
     return_ok = set_ok = domain_return_ok = path_return_ok = lambda self, *args, **kwargs: False
@@ -65,11 +65,12 @@ class API(object):
 
     def _new_session(self):
         ses = requests.Session()
-        ses.mount(API.api_url, TCPKeepaliveAdapter())
+        ses.mount(API.api_url, TCPKeepAliveAdapter())
         if self.use_hyper:
             from hyper.contrib import HTTP20Adapter # pip3 install hyper
             ses.mount(API.api_url, HTTP20Adapter())
         #ses.cookies.set_policy(CookieBlockAllPolicy())
+        self.connect_time = time.time()
         return ses
 
     def close(self):
@@ -88,7 +89,7 @@ class API(object):
                 self.sess.close()
             except:
                 pass
-            self.sess = self.sess = self._new_session()
+            self.sess = self._new_session()
         if self.lock is None:
             return self.__request(endpoint, method, params)
         else:
