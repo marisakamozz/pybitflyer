@@ -10,16 +10,20 @@ from .exception import AuthException
 from threading import Lock
 from http import cookiejar
 import socket
-from urllib3.connection import HTTPConnection
-from hyper.contrib import HTTP20Adapter # pip3 install hyper
 import time
 
-class KeepaliveAdapter(requests.adapters.HTTPAdapter):
+class TCPKeepaliveAdapter(requests.adapters.HTTPAdapter):
+# /etc/sysctl.conf
+#  net.ipv4.tcp_keepalive_time = 60
+#  net.ipv4.tcp_keepalive_intvl = 30
+#  net.ipv4.tcp_keepalive_probes = 3
+# # sysctl -p
     def init_poolmanager(self, *args, **kwargs):
+        from urllib3.connection import HTTPConnection
         kwargs['socket_options'] = HTTPConnection.default_socket_options + [
             (socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1),
         ]
-        super(KeepaliveAdapter, self).init_poolmanager(*args, **kwargs)
+        super(TCPKeepaliveAdapter, self).init_poolmanager(*args, **kwargs)
 
 class CookieBlockAllPolicy(cookiejar.CookiePolicy):
     return_ok = set_ok = domain_return_ok = path_return_ok = lambda self, *args, **kwargs: False
@@ -41,15 +45,17 @@ class API(object):
 
     api_url = "https://api.bitflyer.jp"
 
-    def __init__(self, api_key=None, api_secret=None, keep_session=False, timeout=None, lock=None, logger=None, keepalive_timeout=None):
+    def __init__(self, api_key=None, api_secret=None, keep_session=False, timeout=None,
+                 lock=None, logger=None, keepalive_timeout=None, use_hyper=False):
         self.api_key = api_key
         self.api_secret = api_secret
-        self.sess = self._new_session() if keep_session else None
+        self.use_hyper = use_hyper
         self.timeout = timeout
         self.lock = lock
         self.logger = logger
         self.keepalive_timeout = keepalive_timeout
         self.connect_time = time.time()
+        self.sess = self._new_session() if keep_session else None
 
     def __enter__(self):
         return self
@@ -59,8 +65,10 @@ class API(object):
 
     def _new_session(self):
         ses = requests.Session()
-        ses.mount(API.api_url, KeepaliveAdapter())
-        ses.mount(API.api_url, HTTP20Adapter())
+        ses.mount(API.api_url, TCPKeepaliveAdapter())
+        if self.use_hyper:
+            from hyper.contrib import HTTP20Adapter # pip3 install hyper
+            ses.mount(API.api_url, HTTP20Adapter())
         #ses.cookies.set_policy(CookieBlockAllPolicy())
         return ses
 
