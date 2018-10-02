@@ -7,18 +7,22 @@ import hmac
 import hashlib
 import urllib
 from .exception import AuthException
+from requests.packages.urllib3.util.retry import Retry
+from requests.adapters import HTTPAdapter
 from threading import Lock
 from http import cookiejar
 import socket
 import time
 
 class TCPKeepAliveAdapter(requests.adapters.HTTPAdapter):
+    def __init__(self, **kwargs):
+        super(TCPKeepAliveAdapter, self).__init__(**kwargs)
+    def init_poolmanager(self, *args, **kwargs):
 # /etc/sysctl.conf
 #  net.ipv4.tcp_keepalive_time = 60
 #  net.ipv4.tcp_keepalive_intvl = 30
 #  net.ipv4.tcp_keepalive_probes = 3
 # # sysctl -p
-    def init_poolmanager(self, *args, **kwargs):
         from urllib3.connection import HTTPConnection
         kwargs['socket_options'] = HTTPConnection.default_socket_options + [
             (socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1),
@@ -46,15 +50,13 @@ class API(object):
     api_url = "https://api.bitflyer.jp"
 
     def __init__(self, api_key=None, api_secret=None, keep_session=False, timeout=None,
-                 lock=None, logger=None, keepalive_timeout=None, use_hyper=False):
+                 lock=None, logger=None, retry=0):
+        self.retry = retry
         self.api_key = api_key
         self.api_secret = api_secret
-        self.use_hyper = use_hyper
         self.timeout = timeout
         self.lock = lock
         self.logger = logger
-        self.keepalive_timeout = keepalive_timeout
-        self.connect_time = time.time()
         self.sess = self._new_session() if keep_session else None
 
     def __enter__(self):
@@ -65,12 +67,15 @@ class API(object):
 
     def _new_session(self):
         ses = requests.Session()
-        ses.mount(API.api_url, TCPKeepAliveAdapter())
-        if self.use_hyper:
-            from hyper.contrib import HTTP20Adapter # pip3 install hyper
-            ses.mount(API.api_url, HTTP20Adapter())
+        if self.retry > 0:
+            retry = Retry(total=self.retry,
+                          read=self.retry,
+                          connect=self.retry,
+                          backoff_factor=0.2,
+                          status_forcelist=[500, 502, 504],
+                          method_whitelist=frozenset(['GET', 'POST']))
+            ses.mount(API.api_url, TCPKeepAliveAdapter(max_retries=retry))
         #ses.cookies.set_policy(CookieBlockAllPolicy())
-        self.connect_time = time.time()
         return ses
 
     def close(self):
@@ -83,13 +88,6 @@ class API(object):
             self.sess.close()
 
     def _request(self, endpoint, method="GET", params=None):
-        if ((self.keepalive_timeout is not None and self.sess) and
-            time.time() - self.connect_time > self.keepalive_timeout):
-            try:
-                self.sess.close()
-            except:
-                pass
-            self.sess = self._new_session()
         if self.lock is None:
             return self.__request(endpoint, method, params)
         else:
