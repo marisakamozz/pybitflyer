@@ -47,9 +47,10 @@ class API(object):
                           API object keeps HTTP session.
     """
 
-    api_url = "https://api.bitflyer.jp"
+    api_url = "https://api.bitflyer.com"
 
-    def __init__(self, api_key=None, api_secret=None, keep_session=False, timeout=None,
+    def __init__(self, api_key=None, api_secret=None,
+                 keep_session=False, timeout=None,
                  lock=None, logger=None, retry=0):
         self.retry = retry
         self.api_key = api_key
@@ -57,6 +58,7 @@ class API(object):
         self.timeout = timeout
         self.lock = lock
         self.logger = logger
+        self.keep_session = keep_session
         self.sess = self._new_session() if keep_session else None
 
     def __enter__(self):
@@ -75,7 +77,7 @@ class API(object):
                           status_forcelist=[500, 502, 504],
                           method_whitelist=frozenset(['GET', 'POST']))
             ses.mount(API.api_url, TCPKeepAliveAdapter(max_retries=retry))
-        #ses.cookies.set_policy(CookieBlockAllPolicy())
+        ses.cookies.set_policy(CookieBlockAllPolicy())
         return ses
 
     def close(self):
@@ -86,6 +88,7 @@ class API(object):
         """
         if self.sess:
             self.sess.close()
+            self.sess = None
 
     def _request(self, endpoint, method="GET", params=None):
         if self.lock is None:
@@ -93,12 +96,11 @@ class API(object):
         else:
             with self.lock:
                 return self.__request(endpoint, method, params)
-            
-            
+
     def __request(self, endpoint, method="GET", params=None):
         url = self.api_url + endpoint
         body = ""
-        header = {"Content-Type": "application/json"}
+        header = {"Content-Type": "application/json", "Accept-Encoding": "gzip, deflate"}
 
         if method == "POST":
             body = json.dumps(params)
@@ -132,8 +134,10 @@ class API(object):
                 self.sess = self._new_session()
             raise
         finally:
-            if sess is not self.sess:
+            if not self.keep_session:
                 sess.close()
+            elif self.sess is None:
+                self.sess = sess
 
         content = ""
         if len(response.content) > 0:
