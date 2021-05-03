@@ -7,14 +7,14 @@ import hmac
 import hashlib
 import urllib
 from .exception import AuthException
-from requests.packages.urllib3.util.retry import Retry
+from urllib3.util.retry import Retry
 from requests.adapters import HTTPAdapter
 from threading import Lock
 from http import cookiejar
 import socket
 import time
 
-class TCPKeepAliveAdapter(requests.adapters.HTTPAdapter):
+class TCPKeepAliveAdapter(HTTPAdapter):
     def __init__(self, **kwargs):
         super(TCPKeepAliveAdapter, self).__init__(**kwargs)
     def init_poolmanager(self, *args, **kwargs):
@@ -151,6 +151,20 @@ class API(object):
 
     """HTTP Public API"""
 
+    def markets(self, **params):
+        """Market List
+
+        API Type
+        --------
+        HTTP Public API
+
+        Docs
+        ----
+        https://lightning.bitflyer.com/docs?lang=en#market-list
+        """
+        endpoint = "/v1/markets"
+        return self._request(endpoint, params=params)
+
     def board(self, **params):
         """Order Book
 
@@ -206,6 +220,44 @@ class API(object):
         endpoint = "/v1/executions"
         return self._request(endpoint, params=params)
 
+    def getboardstate(self, **params):
+        """Orderbook status
+        This will allow you to determine the current status of the orderbook.
+
+        API Type
+        --------
+        HTTP Public API
+
+        Parameters
+        ----------
+        product_code: Designate "BTC_JPY", "FX_BTC_JPY" or "ETH_BTC".
+
+        Response
+        --------
+        health: Operational status of the exchange. Will display one of the following results.
+            NORMAL: The exchange is operating.
+            BUSY: The exchange is experiencing high traffic.
+            VERY BUSY: The exchange is experiencing very heavy traffic.
+            SUPER BUSY: The exchange is experiencing extremely heavy traffic. There is a possibility that orders will fail or be processed after a delay.
+            NO ORDER: Orders can not be received.
+            STOP: The exchange has been stopped. Orders will not be accepted.
+        state: State of the order book. Displays one of the following:
+            RUNNING: Operating
+            CLOSED: Suspending
+            STARTING: Restarting
+            PREOPEN: Performing Itayose
+            CIRCUIT BREAK: Circuit breaker triggered
+            AWAITING SQ: Calculating SQ (special quotation) for Lightning Futures after trades complete
+            MATURED: Lightning Futures maturity reached
+        data: Additional information on the order book.
+            special_quotation: Lightning Futures SQ (special quotation)
+        Docs
+        ----
+        https://lightning.bitflyer.com/docs?lang=en#orderbook-status
+        """
+        endpoint = "/v1/getboardstate"
+        return self._request(endpoint, params=params)
+
     def gethealth(self, **params):
         """Exchange status
         This will allow you to determine the current status of the exchange.
@@ -217,7 +269,6 @@ class API(object):
         Parameters
         ----------
         product_code: Designate "BTC_JPY", "FX_BTC_JPY" or "ETH_BTC".
-        count, before, after: See Pagination.
 
         Response
         --------
@@ -254,6 +305,23 @@ class API(object):
         return self._request(endpoint, params=params)
 
     """HTTP Private API"""
+
+    def getpermissions(self, **params):
+        """Get API Key Permissions
+
+        API Type
+        --------
+        HTTP Private API
+
+        Docs
+        ----
+        https://lightning.bitflyer.com/docs?lang=en#get-api-key-permissions
+        """
+        if not all([self.api_key, self.api_secret]):
+            raise AuthException()
+
+        endpoint = "/v1/me/getpermissions"
+        return self._request(endpoint, params=params)
 
     def getbalance(self, **params):
         """Get Account Asset Balance
@@ -296,28 +364,21 @@ class API(object):
         endpoint = "/v1/me/getcollateral"
         return self._request(endpoint, params=params)
 
-    def getcollateralhistory(self, **params):
-        """Get Margin Change History
+    def getcollateralaccounts(self, **params):
+        """Get Margin Status
 
         API Type
         --------
         HTTP Private API
 
-        Response
-        --------
-        collateral: This is the amount of deposited in Japanese Yen.
-        open_position_pnl: This is the profit or loss from valuation.
-        require_collateral: This is the current required margin.
-        keep_rate: This is the current maintenance margin.
-
         Docs
         ----
-        https://lightning.bitflyer.jp/docs?lang=en#get-margin-change-history
+        https://lightning.bitflyer.jp/docs?lang=en#get-margin-status
         """
         if not all([self.api_key, self.api_secret]):
             raise AuthException()
 
-        endpoint = "/v1/me/getcollateralhistory"
+        endpoint = "/v1/me/getcollateralaccounts"
         return self._request(endpoint, params=params)
 
     def getaddresses(self, **params):
@@ -343,7 +404,7 @@ class API(object):
         return self._request(endpoint, params=params)
 
     def getcoinins(self, **params):
-        """Get Bitcoin/Ether Deposit History
+        """Get Crypto Assets Deposit History
 
         API Type
         --------
@@ -359,7 +420,7 @@ class API(object):
 
         Docs
         ----
-        https://lightning.bitflyer.jp/docs?lang=en#get-bitcoin-ether-deposit-history
+        https://lightning.bitflyer.com/docs?lang=en#get-crypto-assets-deposit-history
         """
         if not all([self.api_key, self.api_secret]):
             raise AuthException()
@@ -406,7 +467,7 @@ class API(object):
         return self._request(endpoint, "POST", params=params)
 
     def getcoinouts(self, **params):
-        """Get Bitcoin/Ether Transaction History
+        """Get Crypto Assets Transaction History
 
         API Type
         --------
@@ -415,7 +476,6 @@ class API(object):
         Parameters
         ----------
         count, before, after: See Pagination.
-        message_id: You can confirm delivery status by checking a transaction receipt ID with the Bitcoin/Ethereum External Delivery API.
 
         Response
         --------
@@ -423,7 +483,7 @@ class API(object):
 
         Docs
         ----
-        https://lightning.bitflyer.jp/docs?lang=en#get-bitcoin-ether-transaction-history
+        https://lightning.bitflyer.com/docs?lang=en#get-crypto-assets-transaction-history
         """
         if not all([self.api_key, self.api_secret]):
             raise AuthException()
@@ -480,7 +540,7 @@ class API(object):
         return self._request(endpoint, params=params)
 
     def withdraw(self, **params):
-        """Cancelling deposits
+        """Withdrawing Funds
 
         API Type
         --------
@@ -491,6 +551,8 @@ class API(object):
         currency_code: Required. Currently only compatible with "JPY".
         bank_account_id: Required. Specify id of the bank account.
         amount: Required. This is the amount that you are canceling.
+        code: Two-factor authentication code; required if two-factor authentication has been enabled for withdrawals. Reference the two-factor authentication section.
+Additional fees apply for withdrawals. Please see the Fees and Taxes page for reference.
 
         Additional fees apply for withdrawals. Please see the Fees and Taxes page for reference.
 
@@ -502,7 +564,7 @@ class API(object):
 
         Docs
         ----
-        https://lightning.bitflyer.jp/docs?lang=en#cancelling-deposits
+        https://lightning.bitflyer.com/docs?lang=en#withdrawing-funds
         """
         if not all([self.api_key, self.api_secret]):
             raise AuthException()
@@ -520,6 +582,7 @@ class API(object):
         Parameters
         ----------
         count, before, after: See Pagination.
+        message_id: Check the withdrawal status by specifying the receipt ID from the returned value from the withdrawal API.
 
         Response
         --------
@@ -821,8 +884,8 @@ class API(object):
         endpoint = "/v1/me/getexecutions"
         return self._request(endpoint, params=params)
 
-    def getpositions(self, **params):
-        """
+    def getbalancehistory(self, **params):
+        """List Balance History
 
         API Type
         --------
@@ -830,7 +893,29 @@ class API(object):
 
         Parameters
         ----------
-        product_code: Currently supports only "FX_BTC_JPY".
+        currency_code: Please specify a currency code. If omitted, the value is set to JPY.
+        count, before, after: See Pagination.
+
+        Docs
+        ----
+        https://lightning.bitflyer.com/docs?lang=en#list-balance-history
+        """
+        if not all([self.api_key, self.api_secret]):
+            raise AuthException()
+
+        endpoint = "/v1/me/getbalancehistory"
+        return self._request(endpoint, params=params)
+
+    def getpositions(self, **params):
+        """Get Open Interest Summary
+
+        API Type
+        --------
+        HTTP Private API
+
+        Parameters
+        ----------
+        product_code: Currently supports Lightning FX and Lightning Futures.
 
         Docs
         ----
@@ -840,6 +925,34 @@ class API(object):
             raise AuthException()
 
         endpoint = "/v1/me/getpositions"
+        return self._request(endpoint, params=params)
+
+    def getcollateralhistory(self, **params):
+        """Get Margin Change History
+
+        API Type
+        --------
+        HTTP Private API
+
+        Parameters
+        ----------
+        count, before, after: See Pagination.
+
+        Response
+        --------
+        collateral: This is the amount of deposited in Japanese Yen.
+        open_position_pnl: This is the profit or loss from valuation.
+        require_collateral: This is the current required margin.
+        keep_rate: This is the current maintenance margin.
+
+        Docs
+        ----
+        https://lightning.bitflyer.jp/docs?lang=en#get-margin-change-history
+        """
+        if not all([self.api_key, self.api_secret]):
+            raise AuthException()
+
+        endpoint = "/v1/me/getcollateralhistory"
         return self._request(endpoint, params=params)
 
     def gettradingcommission(self, **params):
