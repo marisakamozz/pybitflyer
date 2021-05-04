@@ -428,44 +428,6 @@ class API(object):
         endpoint = "/v1/me/getcoinins"
         return self._request(endpoint, params=params)
 
-    def sendcoin(self, **params):
-        """Bitcoin/Ethereum External Delivery
-
-        API Type
-        --------
-        HTTP Private API
-
-        Parameters
-        ----------
-        currency_code: Required. Type of currency to be sent. Please use "BTC" for Bitcoin and "ETH" for Ethereum.
-        amount: Amount to be sent, specified as a number.
-            If the currency_code is "BTC", then the units are in BTC.
-            If the currency_code is `"ETC", then the units are in Ether.
-        amount_text: Specifies the amount to be sent as a string. You are required to choose either amount or amount_text.
-        address: Required. Specifies the address to which it will be sent.
-            When currency_code is specified as "ETH", funds cannot be sent to a contract address.
-            The address designated here will automatically be labeled as an external address.
-        additional_fee: You may specify an additional fee to be paid to Bitcoin miners to prioritize their transaction. Standard fees based on transaction data size are paid by bitFlyer; however, the customer is responsible for any additional fees.
-            Omitted values will be entered as "0".
-            The upper limit is 0.0005 BTC .
-            This can not be used if currency_code is specified as "ETH".
-
-        Response
-        --------
-        message_id: Transaction Message Receipt ID
-
-        If an error with a negative status value is returned, the transaction has not been broadcast.
-
-        Docs
-        ----
-        https://lightning.bitflyer.jp/docs?lang=en#bitcoin-ethereum-external-delivery
-        """
-        if not all([self.api_key, self.api_secret]):
-            raise AuthException()
-
-        endpoint = "/v1/me/sendcoin"
-        return self._request(endpoint, "POST", params=params)
-
     def getcoinouts(self, **params):
         """Get Crypto Assets Transaction History
 
