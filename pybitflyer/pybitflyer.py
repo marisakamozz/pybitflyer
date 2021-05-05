@@ -6,7 +6,7 @@ import time
 import hmac
 import hashlib
 import urllib
-from .exception import AuthException
+from .exception import AuthException, APIException
 from urllib3.util.retry import Retry
 from requests.adapters import HTTPAdapter
 from threading import Lock
@@ -146,7 +146,11 @@ class API(object):
             except json.decoder.JSONDecodeError:
                 if self.logger:
                     self.logger.error("JSON Decode Error: {}".format(response.content))
-                raise 
+                raise
+        
+        if response.status_code != 200:
+            raise APIException(endpoint, method, response.status_code, content, params)
+        
         return content
 
     """HTTP Public API"""
